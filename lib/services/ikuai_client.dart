@@ -196,9 +196,8 @@ class IkuaiClient implements IkuaiApi {
     }
 
     final data = resp.data;
-    final result = _extractResult(data);
-    if (result != successCode) {
-      throw IkuaiException(result, _extractErrMsg(data) ?? '登录失败');
+    if (!_isSuccess(data)) {
+      throw IkuaiException(_extractResult(data), _extractErrMsg(data) ?? '登录失败');
     }
 
     _sessionCookie = _extractSessionCookie(resp, data);
@@ -231,12 +230,13 @@ class IkuaiClient implements IkuaiApi {
     }
 
     final data = resp.data;
-    final result = _extractResult(data);
-    // 旧版成功码 10000；企业版 4.x 成功码 0，两者都视为成功。
-    if (result == successCode || result == 0) {
+    if (_isSuccess(data)) {
       return data;
     }
-    throw IkuaiException(result, _extractErrMsg(data) ?? '调用失败');
+    throw IkuaiException(
+      _extractResult(data),
+      _extractErrMsg(data) ?? '调用失败（原始返回：${_summarize(data)}）',
+    );
   }
 
   @override
@@ -275,18 +275,53 @@ class IkuaiClient implements IkuaiApi {
     return -1;
   }
 
+  /// 判断一次响应是否为「成功」。
+  ///
+  /// 爱快不同固件版本的成功标识不一致，需综合判断：
+  /// - 旧版：`Result=10000`，或部分版本仅返回 `ErrMsg=Success`（无 Result 字段）；
+  /// - 企业版 4.x：`code=0`。
+  bool _isSuccess(dynamic data) {
+    final result = _extractResult(data);
+    if (result == successCode || result == 0) return true;
+    final msg = _extractErrMsg(data);
+    return msg != null && msg.trim().toLowerCase() == 'success';
+  }
+
   String? _extractErrMsg(dynamic data) {
     if (data is Map) {
-      final v = data['ErrMsg'] ?? data['errmsg'] ?? data['message'] ?? data['msg'];
+      final v = data['ErrMsg'] ??
+          data['errmsg'] ??
+          data['ErrorMsg'] ??
+          data['error_msg'] ??
+          data['message'] ??
+          data['msg'];
       return v?.toString();
     }
     return null;
   }
 
+  /// 将响应摘要化为短字符串（用于错误提示，避免暴露过长原始数据）。
+  String _summarize(dynamic data) {
+    String s;
+    try {
+      s = jsonEncode(data);
+    } catch (_) {
+      s = data.toString();
+    }
+    if (s.length <= 200) return s;
+    return '${s.substring(0, 200)}…';
+  }
+
   /// 判断是否为「会话过期」：返回码等于未登录码，或返回非 JSON（多为登录页跳转）。
   bool _isSessionExpired(dynamic data) {
     if (data is! Map) return true;
-    return _extractResult(data) == sessionExpiredCode;
+    if (_extractResult(data) == sessionExpiredCode) return true;
+    // 部分固件用提示语标识会话失效（如 "no login" / "未登录"）。
+    final msg = _extractErrMsg(data)?.toLowerCase() ?? '';
+    return msg.contains('no login') ||
+        msg.contains('未登录') ||
+        msg.contains('expired') ||
+        msg.contains('过期');
   }
 
   /// 从登录响应中提取会话 Cookie。
@@ -321,21 +356,28 @@ class IkuaiClient implements IkuaiApi {
   /// 从业务响应中提取列表数据（兼容多种容器字段）。
   List<Map<String, dynamic>> _extractList(dynamic data) {
     dynamic list;
-    if (data is Map) {
-      // `Data`(旧版) / `results`(企业版 4.x) / `data`/`result` 多格式兼容。
-      final d = data['Data'] ??
+    if (data is List) {
+      list = data;
+    } else if (data is Map) {
+      // 数据可能直接铺在顶层，也可能包在 Data/data/result/results 容器里。
+      final container = data['Data'] ??
           data['data'] ??
           data['result'] ??
-          data['results'];
-      if (d is List) {
-        list = d;
-      } else if (d is Map) {
-        list = d['data'] ?? d['list'] ?? d['items'] ?? d['rows'] ?? [];
-      } else {
-        list = data['list'] ?? data['items'] ?? data['rows'] ?? [];
+          data['results'] ??
+          data['list'] ??
+          data['items'] ??
+          data['rows'];
+      if (container is List) {
+        list = container;
+      } else if (container is Map) {
+        list = container['data'] ??
+            container['result'] ??
+            container['results'] ??
+            container['list'] ??
+            container['items'] ??
+            container['rows'] ??
+            [];
       }
-    } else if (data is List) {
-      list = data;
     }
 
     if (list is! List) return [];
