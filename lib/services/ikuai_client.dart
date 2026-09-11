@@ -232,7 +232,8 @@ class IkuaiClient implements IkuaiApi {
 
     final data = resp.data;
     final result = _extractResult(data);
-    if (result == successCode) {
+    // 旧版成功码 10000；企业版 4.x 成功码 0，两者都视为成功。
+    if (result == successCode || result == 0) {
       return data;
     }
     throw IkuaiException(result, _extractErrMsg(data) ?? '调用失败');
@@ -240,17 +241,21 @@ class IkuaiClient implements IkuaiApi {
 
   @override
   Future<List<Map<String, dynamic>>> getDhcpBindings() async {
-    final data = await call('dhcp_addr_bind', 'show', {'TYPE': 'data'});
+    // 爱快 DHCP 静态分配模块名是 `dhcp_static`（实测，`dhcp_addr_bind` 是
+    // 社区文档误传）。列表读取用分页参数 TYPE=total,data + limit。
+    final data = await call('dhcp_static', 'show',
+        {'TYPE': 'total,data', 'limit': '0,500'});
     return _extractList(data);
   }
 
   @override
   Future<void> saveDhcpBinding(Map<String, dynamic> item,
       {required bool isEdit}) async {
+    // add/edit 的 param 是「平铺字段」，不要用 {'data': item} 包装。
     await call(
-      'dhcp_addr_bind',
+      'dhcp_static',
       isEdit ? 'edit' : 'add',
-      {'data': item},
+      item,
     );
   }
 
@@ -317,7 +322,11 @@ class IkuaiClient implements IkuaiApi {
   List<Map<String, dynamic>> _extractList(dynamic data) {
     dynamic list;
     if (data is Map) {
-      final d = data['Data'] ?? data['data'] ?? data['result'];
+      // `Data`(旧版) / `results`(企业版 4.x) / `data`/`result` 多格式兼容。
+      final d = data['Data'] ??
+          data['data'] ??
+          data['result'] ??
+          data['results'];
       if (d is List) {
         list = d;
       } else if (d is Map) {
