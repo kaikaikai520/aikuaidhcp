@@ -63,6 +63,103 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 > 提示：`--host 0.0.0.0` 让服务监听所有网卡，内网其他设备才能访问；仅本机使用可改成 `127.0.0.1`。
 
+## docker-compose.yml 编写说明
+
+不想用仓库里的现成 compose、而是自己手写一个时（如部署到 NAS），
+下面逐字段说明**哪些文件夹要映射**、**端口填多少**。
+
+### 完整示例
+
+**免构建版（拉 Docker Hub 预构建镜像）**：
+
+```yaml
+services:
+  aikuaidhcp:
+    image: dehua/aikuaidhcp:latest        # 镜像地址（拉预构建，无需本地 build）
+    container_name: aikuaidhcp            # 容器名，可自定义
+    ports:
+      - "8000:8000"                       # 端口映射：宿主机:容器
+    volumes:
+      - ./data:/data                      # 数据目录映射：宿主机:容器
+    restart: unless-stopped               # 开机自启 / 异常自动重启
+```
+
+**本地构建版（在设备上 build，需先上传代码）**：
+
+```yaml
+services:
+  aikuaidhcp:
+    build: .                              # 用当前目录的 Dockerfile 构建
+    container_name: aikuaidhcp
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+```
+
+### 需要映射的文件夹（volumes）
+
+**只有 1 个文件夹需要映射：`/data`。**
+
+| 宿主机路径 | 容器内路径 | 作用 |
+|-----------|-----------|------|
+| `./data`（或任意你选的位置） | `/data` | 存放服务运行时数据 |
+
+该目录会生成两个文件，**必须持久化**，否则容器重建后配置丢失：
+
+| 文件 | 内容 |
+|------|------|
+| `config.json` | 爱快连接信息（IP/端口/账号/密码）+ 网关 A/B 预设 |
+| `hidden.json` | 你隐藏的终端 mac 列表 |
+
+> 代码本身（`app/`、`static/` 等）**不需要映射**——它们已打包进镜像；
+> 映射 `/data` 的唯一目的，就是让配置和隐藏列表在容器重建后不丢。
+
+宿主机路径两种写法（建议用绝对路径，避免 compose 文件位置变动导致数据卷找不到）：
+
+```yaml
+volumes:
+  - ./data:/data                          # 相对路径：compose 文件所在目录下的 data 文件夹
+  # 或
+  - /vol1/docker/aikuaidhcp/data:/data    # 绝对路径（更稳妥）
+```
+
+### 端口填多少（ports）
+
+格式是 `"宿主机端口:容器端口"`，**冒号右边固定 8000，左边随便填**：
+
+```yaml
+ports:
+  - "8000:8000"    # 默认：访问 http://<内网IP>:8000
+  # - "8080:8000"  # 8000 被占用就改左边
+```
+
+| 项 | 值 | 说明 |
+|----|----|------|
+| 冒号**右边**（容器内端口） | `8000` | 固定不变，程序监听 8000 |
+| 冒号**左边**（宿主机端口） | 任意 | 你浏览器最终访问的端口 |
+
+**判断端口是否被占用**：浏览器访问没反应，多半是左侧端口被别的服务占了，改个数字即可（如 `8080:8000`）。
+
+### 逐字段速查
+
+| 字段 | 必填 | 含义 |
+|------|------|------|
+| `image` / `build` | 二选一 | 拉预构建镜像 / 本地构建 |
+| `container_name` | 否 | 容器显示名，方便 `docker ps` 辨认 |
+| `ports` | 是 | 端口映射，格式 `"宿主机:容器"` |
+| `volumes` | 是 | 数据目录映射，只有 `/data` 需要 |
+| `restart` | 否 | `unless-stopped` = 开机自启 + 异常自动拉起 |
+
+### 更新与卸载
+
+```bash
+docker compose pull && docker compose up -d   # 更新到最新镜像
+docker compose logs -f                        # 查看日志
+docker compose down                           # 停止并删除容器（./data 会保留）
+```
+
 ## 前置条件（爱快侧）
 
 - 一个具备爱快 Web 管理权限的账号（默认 `admin`）。
