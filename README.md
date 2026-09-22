@@ -39,8 +39,10 @@ docker compose -f docker-compose.pull.yml up -d
 
 浏览器访问 `http://<设备内网IP>:8000` 即可。
 
+- 默认使用 **host 网络模式**：服务要访问内网的爱快路由器，默认 bridge 模式在部分 NAS 上无法转发到局域网 IP，故固定用 host。
 - 配置自动落盘到 `web/data/`（已挂载为容器卷 `/data`，容器重建不丢失）。
 - 容器已设置 `restart: unless-stopped`，开机自启。
+- **自定义端口**：host 模式下不能用 `ports` 映射，改 compose 里的 `PORT` 环境变量即可（详见下文「端口填多少」）。
 
 ### 方式二：本地构建部署（开发 / 需自行改代码时）
 
@@ -48,6 +50,8 @@ docker compose -f docker-compose.pull.yml up -d
 cd web
 docker compose up -d --build
 ```
+
+同样默认 host 网络模式 + `PORT` 环境变量（默认 8000）。
 
 ### 方式三：本地直接运行（开发 / 临时使用）
 
@@ -77,8 +81,9 @@ services:
   aikuaidhcp:
     image: dehua/aikuaidhcp:latest        # 镜像地址（拉预构建，无需本地 build）
     container_name: aikuaidhcp            # 容器名，可自定义
-    ports:
-      - "8000:8000"                       # 端口映射：宿主机:容器
+    network_mode: host                    # 必填：host 模式，访问内网路由器
+    environment:
+      - PORT=8000                         # 访问端口，改这里自定义（默认 8000）
     volumes:
       - ./data:/data                      # 数据目录映射：宿主机:容器
     restart: unless-stopped               # 开机自启 / 异常自动重启
@@ -91,8 +96,9 @@ services:
   aikuaidhcp:
     build: .                              # 用当前目录的 Dockerfile 构建
     container_name: aikuaidhcp
-    ports:
-      - "8000:8000"
+    network_mode: host
+    environment:
+      - PORT=8000
     volumes:
       - ./data:/data
     restart: unless-stopped
@@ -125,22 +131,23 @@ volumes:
   - /vol1/docker/aikuaidhcp/data:/data    # 绝对路径（更稳妥）
 ```
 
-### 端口填多少（ports）
+### 端口填多少（PORT）
 
-格式是 `"宿主机端口:容器端口"`，**冒号右边固定 8000，左边随便填**：
+本项目使用 **host 网络模式**，容器直接占用宿主机端口，**没有 `ports` 映射**（host 模式下 `ports` 无效甚至报错）。端口通过 `PORT` 环境变量配置：
 
 ```yaml
-ports:
-  - "8000:8000"    # 默认：访问 http://<内网IP>:8000
-  # - "8080:8000"  # 8000 被占用就改左边
+environment:
+  - PORT=8000    # 默认：访问 http://<内网IP>:8000
+  # - PORT=8040  # 8000 被占用就改成别的数字
 ```
 
 | 项 | 值 | 说明 |
 |----|----|------|
-| 冒号**右边**（容器内端口） | `8000` | 固定不变，程序监听 8000 |
-| 冒号**左边**（宿主机端口） | 任意 | 你浏览器最终访问的端口 |
+| `PORT` 环境变量 | `8000`（默认） | 服务监听的端口，即浏览器最终访问的端口 |
 
-**判断端口是否被占用**：浏览器访问没反应，多半是左侧端口被别的服务占了，改个数字即可（如 `8080:8000`）。
+**为什么用 host 模式而不是 ports 映射**：服务要访问内网的爱快路由器（如 `192.168.31.252`），默认 bridge 网络模式下容器访问局域网 IP 要经过宿主机 NAT 转发，在部分 NAS 上会失败；host 模式让容器直接共享宿主网络栈，只要 NAS 能通路由器，容器就能通。
+
+**判断端口是否被占用**：浏览器访问没反应，多半是该端口被别的服务占了，改个数字即可（如 `PORT=8040`，访问 `http://<IP>:8040`）。
 
 ### 逐字段速查
 
@@ -148,7 +155,8 @@ ports:
 |------|------|------|
 | `image` / `build` | 二选一 | 拉预构建镜像 / 本地构建 |
 | `container_name` | 否 | 容器显示名，方便 `docker ps` 辨认 |
-| `ports` | 是 | 端口映射，格式 `"宿主机:容器"` |
+| `network_mode` | 是 | 固定 `host`，访问内网路由器必需 |
+| `environment` | 否 | `PORT` 端口（默认 8000） |
 | `volumes` | 是 | 数据目录映射，只有 `/data` 需要 |
 | `restart` | 否 | `unless-stopped` = 开机自启 + 异常自动拉起 |
 

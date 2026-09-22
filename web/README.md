@@ -26,7 +26,9 @@ docker compose -f docker-compose.pull.yml up -d
 
 浏览器访问 `http://<内网IP>:8000`。
 
-配置文件会落盘到 `web/data/`。
+- 默认 **host 网络模式**（访问内网路由器必需，bridge 在部分 NAS 上无法转发到局域网 IP）。
+- 配置文件会落盘到 `web/data/`。
+- 自定义端口：改 compose 里的 `PORT` 环境变量（默认 8000），详见根目录 `README.md`。
 
 ### 方式二：本地构建部署
 
@@ -34,6 +36,8 @@ docker compose -f docker-compose.pull.yml up -d
 cd web
 docker compose up -d --build
 ```
+
+同样默认 host 网络模式 + `PORT` 环境变量（默认 8000）。
 
 ### 方式三：本地直接运行
 

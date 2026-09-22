@@ -1,9 +1,16 @@
+# 本地构建部署：在设备上 build（需先上传代码）
+# 用法：docker compose up -d --build
+#
+# 说明：使用 host 网络模式 —— 服务需要访问内网的爱快路由器，
+# 默认 bridge 模式在部分 NAS 上无法转发到局域网 IP，故必须用 host。
+# host 模式下不能用 ports 映射，端口改用 PORT 环境变量配置（默认 8000）。
 services:
   aikuaidhcp:
     build: .
     container_name: aikuaidhcp
-    ports:
-      - "8000:8000"
+    network_mode: host
+    environment:
+      - PORT=8000
     volumes:
       - ./data:/data
     restart: unless-stopped
