@@ -228,6 +228,43 @@ body {
   flex-shrink: 0;
 }
 
+/* 隐藏/恢复按钮 */
+.hide-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-sub);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.hide-btn:hover {
+  background: #f3f4f6;
+}
+
+.hide-btn.restore {
+  color: var(--primary);
+  border-color: #bcd0f7;
+}
+
+.hide-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+/* 隐藏的终端置灰 */
+.device-item.is-hidden {
+  opacity: 0.55;
+}
+
+.device-item.is-hidden .device-name {
+  text-decoration: line-through;
+  text-decoration-color: var(--text-sub);
+}
+
 .switch {
   position: relative;
   width: 48px;

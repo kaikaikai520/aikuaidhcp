@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .config import ConfigStore
+from .config import ConfigStore, HiddenStore
 from .ikuai_client import IkuaiClient, IkuaiError, get_field
 from .schemas import ConfigIn, DeviceOut, ToggleResult
 
@@ -21,6 +21,7 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 app = FastAPI(title="爱快 DHCP 网关切换助手", version="0.2.0")
 
 store = ConfigStore()
+hidden_store = HiddenStore()
 _client: Optional[IkuaiClient] = None
 
 
@@ -108,6 +109,7 @@ def list_devices() -> dict:
     except IkuaiError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
 
+    hidden_macs = set(hidden_store.load())
     devices = []
     for item in bindings:
         mac = get_field(item, "mac")
@@ -122,6 +124,7 @@ def list_devices() -> dict:
                 gateway=gateway,
                 is_a=bool(gateway and gateway == gateway_a),
                 is_b=bool(gateway and gateway == gateway_b),
+                hidden=(mac.lower() in hidden_macs),
             ).model_dump()
         )
     return {"devices": devices}
@@ -139,6 +142,20 @@ def toggle(mac: str) -> ToggleResult:
     except IkuaiError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
     return ToggleResult(mac=mac, old_gateway=old, new_gateway=new)
+
+
+@app.post("/api/devices/{mac}/hide")
+def hide_device(mac: str) -> dict:
+    """隐藏指定终端（后续列表默认不显示）。"""
+    hidden_store.add(mac)
+    return {"ok": True}
+
+
+@app.post("/api/devices/{mac}/unhide")
+def unhide_device(mac: str) -> dict:
+    """取消隐藏指定终端。"""
+    hidden_store.remove(mac)
+    return {"ok": True}
 
 
 @app.get("/")

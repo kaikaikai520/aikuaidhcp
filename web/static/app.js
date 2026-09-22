@@ -15,8 +15,11 @@
   const btnRefresh = $('#btn-refresh');
   const btnSettings = $('#btn-settings');
   const btnCancel = $('#btn-cancel');
+  const btnToggleHidden = $('#btn-toggle-hidden');
 
   const toggling = new Set(); // 正在切换的 mac 集合
+  const hiding = new Set(); // 正在隐藏/恢复的 mac 集合
+  let showHidden = false; // 是否展开显示隐藏的终端
 
   // ---- 工具 ----
 
@@ -80,13 +83,24 @@
   // ---- 渲染 ----
 
   function renderDevices(devices) {
-    deviceList.innerHTML = '';
-    listEmpty.classList.toggle('hidden', devices.length !== 0);
-    summary.textContent = `共 ${devices.length} 台终端`;
+    const hiddenCount = devices.filter((d) => d.hidden).length;
+    const visible = devices.filter((d) => !d.hidden || showHidden);
 
-    for (const d of devices) {
+    deviceList.innerHTML = '';
+    listEmpty.classList.toggle('hidden', visible.length !== 0);
+    summary.textContent = showHidden
+      ? `共 ${devices.length} 台终端（含 ${hiddenCount} 台隐藏）`
+      : `共 ${devices.length - hiddenCount} 台终端` +
+        (hiddenCount ? `（已隐藏 ${hiddenCount} 台）` : '');
+
+    btnToggleHidden.textContent = showHidden
+      ? '收起隐藏'
+      : `隐藏的终端 (${hiddenCount})`;
+    btnToggleHidden.classList.toggle('hidden', hiddenCount === 0);
+
+    for (const d of visible) {
       const li = document.createElement('li');
-      li.className = 'device-item';
+      li.className = 'device-item' + (d.hidden ? ' is-hidden' : '');
 
       const info = document.createElement('div');
       info.className = 'device-info';
@@ -119,6 +133,16 @@
       const toggle = document.createElement('div');
       toggle.className = 'toggle';
 
+      const hideBtn = document.createElement('button');
+      hideBtn.className = 'hide-btn' + (d.hidden ? ' restore' : '');
+      hideBtn.textContent = d.hidden ? '恢复' : '隐藏';
+      hideBtn.setAttribute(
+        'aria-label',
+        (d.hidden ? '恢复显示 ' : '隐藏 ') + (d.name || d.mac)
+      );
+      if (hiding.has(d.mac)) hideBtn.disabled = true;
+      hideBtn.addEventListener('click', () => onToggleHidden(d));
+
       const label = document.createElement('span');
       label.className = 'toggle-label ' + (d.is_a ? 'a' : d.is_b ? 'b' : 'none');
       label.textContent = d.is_a ? 'A' : d.is_b ? 'B' : '—';
@@ -132,6 +156,7 @@
       }
       sw.addEventListener('click', () => onToggle(d, sw));
 
+      toggle.appendChild(hideBtn);
       toggle.appendChild(label);
       toggle.appendChild(sw);
       li.appendChild(info);
@@ -180,6 +205,23 @@
     }
   }
 
+  async function onToggleHidden(d) {
+    const action = d.hidden ? 'unhide' : 'hide';
+    hiding.add(d.mac);
+    try {
+      await api(`/api/devices/${encodeURIComponent(d.mac)}/${action}`, {
+        method: 'POST',
+      });
+      showToast(d.hidden ? `已恢复显示 ${d.name || d.mac}` : `已隐藏 ${d.name || d.mac}`);
+      hiding.delete(d.mac);
+      await loadDevices();
+    } catch (e) {
+      hiding.delete(d.mac);
+      showToast('操作失败：' + e.message);
+      await loadDevices();
+    }
+  }
+
   // ---- 初始化 ----
 
   async function init() {
@@ -191,6 +233,11 @@
     }
 
     btnRefresh.addEventListener('click', loadDevices);
+
+    btnToggleHidden.addEventListener('click', () => {
+      showHidden = !showHidden;
+      loadDevices();
+    });
 
     btnSettings.addEventListener('click', () => {
       fillForm(cfg);

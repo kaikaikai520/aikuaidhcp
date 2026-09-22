@@ -22,7 +22,10 @@
   <main id="list-view" class="view">
     <div class="toolbar">
       <span id="summary" class="summary">加载中…</span>
-      <button id="btn-refresh" class="btn">刷新</button>
+      <div class="toolbar-actions">
+        <button id="btn-toggle-hidden" class="btn btn-ghost hidden">隐藏的终端 (0)</button>
+        <button id="btn-refresh" class="btn">刷新</button>
+      </div>
     </div>
     <div id="list-error" class="banner banner-error hidden"></div>
     <ul id="device-list" class="device-list"></ul>
@@ -81,6 +84,6 @@
   <!-- 切换中遮罩提示 -->
   <div id="toast" class="toast hidden"></div>
 
-  <script src="/static/app.js?v=3"></script>
+  <script src="/static/app.js?v=4"></script>
 </body>
 </html>

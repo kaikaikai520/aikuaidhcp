@@ -25,6 +25,7 @@ class DeviceOut(BaseModel):
     gateway: str
     is_a: bool
     is_b: bool
+    hidden: bool = False
 
 
 class ToggleResult(BaseModel):
