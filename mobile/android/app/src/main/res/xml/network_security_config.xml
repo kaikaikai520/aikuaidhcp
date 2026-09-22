@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  爱快路由器默认使用 HTTP（80 端口）且 HTTPS 多为自签名证书，
+  用户填写的管理地址又是任意内网 IP，故此处放开明文流量与用户证书。
+  仅影响本 App 自身的网络请求，不影响系统其他应用。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

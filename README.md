@@ -189,7 +189,7 @@ docker compose down                           # 停止并删除容器（./data �
 ## 目录结构
 
 ```
-web/
+web/                       # Web 服务形态（FastAPI + 原生 JS）
 ├── app/
 │   ├── main.py            # FastAPI 入口（REST 路由 + 静态托管）
 │   ├── ikuai_client.py    # 爱快 API 客户端（登录/会话/网关切换）
@@ -201,6 +201,20 @@ web/
 ├── requirements-dev.txt   # 测试依赖
 ├── Dockerfile
 └── docker-compose.yml
+
+mobile/                    # 安卓 APK 形态（Flutter）
+├── lib/
+│   ├── main.dart              # 入口
+│   ├── theme.dart             # 主题
+│   ├── models/models.dart     # 数据模型（对应 web 的 schemas.py）
+│   ├── services/
+│   │   ├── ikuai_client.dart  # 爱快 API 客户端（对应 ikuai_client.py）
+│   │   └── config_store.dart  # 本地持久化（对应 config.py）
+│   ├── pages/                 # 终端列表页 + 设置页
+│   └── widgets/device_tile.dart
+├── test/                      # Dart 单元测试 + 界面测试
+├── android/                   # 原生工程（权限 / 明文流量 / 自签名证书配置）
+└── pubspec.yaml
 ```
 
 ## REST API
@@ -219,13 +233,27 @@ web/
 ## 运行测试
 
 ```bash
-cd web
-pip install -r requirements-dev.txt
-python -m pytest
+# 安卓版
+cd mobile && flutter test
+
+# Web 版
+cd web && pip install -r requirements-dev.txt && python -m pytest
 ```
+
+## 构建安卓 APK
+
+```bash
+cd mobile
+flutter pub get
+flutter build apk --release                   # 通用包（含全部 ABI，约 48 MB）
+flutter build apk --release --split-per-abi   # 分架构包（约 15–19 MB）
+```
+
+产物在 `mobile/build/app/outputs/flutter-apk/`。详见 [`mobile/README.md`](mobile/README.md)。
 
 ## 文档
 
 - 产品设计：`docs/PRD.md`
 - 技术方案：`docs/TECH_DESIGN.md`
 - Web 服务说明：`web/README.md`
+- 安卓 APK 说明：`mobile/README.md`

@@ -241,3 +241,52 @@ GET /api/devices → 后端 ensure_login → get_dhcp_bindings()
 5. 单元测试 `tests/`。
 6. 部署文件 + README。
 7. 冒烟验证并 git 提交。
+
+## 12. 安卓版（APK）技术说明
+
+仓库另提供与本文档等价的**安卓原生实现**，位于 `mobile/`（Flutter）。
+
+### 12.1 架构调整
+
+Web 版是「浏览器 → 内网后端 → 爱快」三段式；安卓版把中间的 Web 后端整体下移到客户端，
+变成「手机 App → 爱快」两段式，因此**无需部署任何服务端**，代价是手机必须与爱快同一内网。
+
+```
+┌─────────────────────────────────────────────┐
+│  页面层（pages/）                            │  终端列表页 + 设置页（含编排与状态管理）
+├─────────────────────────────────────────────┤
+│  客户端层（services/ikuai_client.dart）      │  与 Web 版 ikuai_client.py 一一对应
+├─────────────────────────────────────────────┤
+│  存储层（services/config_store.dart）        │  KeyValueStore 抽象 + SharedPreferences 实现
+└─────────────────────────────────────────────┘
+```
+
+### 12.2 文件对照
+
+| Web 版 | 安卓版 |
+|---|---|
+| `app/ikuai_client.py` | `lib/services/ikuai_client.dart` |
+| `app/config.py` | `lib/services/config_store.dart` |
+| `app/schemas.py` | `lib/models/models.dart` |
+| `app/main.py`（路由编排） | `lib/pages/home_page.dart`、`lib/pages/config_page.dart` |
+| `static/index.html` + `app.js` + `style.css` | `lib/pages/*` + `lib/widgets/device_tile.dart` + `lib/theme.dart` |
+| `tests/test_ikuai_client.py` | `test/ikuai_client_test.dart` |
+| `tests/test_config.py` | `test/config_store_test.dart` |
+| （无） | `test/widget_test.dart`（界面冒烟测试） |
+
+### 12.3 安卓侧注意事项
+
+- **明文流量**：爱快默认 HTTP:80，Android 9+ 默认禁止明文流量 → 需 `usesCleartextTraffic="true"`
+  与 `res/xml/network_security_config.xml`。
+- **自签名证书**：与 Web 版 `session.verify = False` 等价，用
+  `HttpClient.badCertificateCallback` 放开。
+- **Cookie 会话**：Dart `http` 不自动管理 Cookie，客户端自行维护 `sess_key` cookie 并在每次请求带上。
+- **可测试性**：传输层通过构造参数注入（`IkuaiClient(transport: ...)`），页面通过
+  `clientFactory` 注入，单测无需真实网络。
+
+### 12.4 与 Web 版的行为差异
+
+「响应非 JSON 视为会话失效」这一约定（见第 8 节错误处理）在 Web 版中因非 JSON 被包装为
+`{"raw": ...}` 而**实际未生效**；安卓版补齐了该判断（`IkuaiClient.isUnparsedResponse`），
+并在单测中固化。如需两端严格一致，可同步修正 `web/app/ikuai_client.py` 的 `_is_session_expired`。
+
