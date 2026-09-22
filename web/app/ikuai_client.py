@@ -12,10 +12,11 @@ DHCP 静态分配列表读取、网关 A/B 切换、字段兼容。
   - **成功判断（关键坑）**：不是看 `Result` 码，而是 `ErrMsg=="Success"`（旧版）或 `code==0`（企业版 4.x）；
     部分固件 `/Action/call` 响应不含 `Result` 字段，需综合判断 `Result==10000 || code==0 || ErrMsg=="Success"`。
   - 列表数据容器：旧版 `Data`、企业版 `results`；内层字段 `data`/`result` 等，需多字段兼容。
-- DHCP 静态绑定：`func_name=dhcp_static`（不是 `dhcp_addr_bind`）；读=show(`{"TYPE":"total,data","limit":"0,500"}`)；
-  写=add/edit（param 为平铺字段，不要 `{"data":{}}` 包装）。字段：mac、ip_addr、comment、dns1/dns2（3.7.12+）。
-  - **网关字段名待确认**：爱快不同模块命名不一（`static_rt` 用 `gateway`，DHCP 相关常缩写 `gw`），
-    逆向项目 gxxHuang 的 dhcp_static `add` 未覆盖网关字段，本实现默认用 `gw` 并做双字段兼容。
+- DHCP 静态绑定：`func_name=dhcp_static`（不是 `dhcp_addr_bind`）；写=add/edit（param 为平铺字段，不要 `{"data":{}}` 包装）。
+  - **show 参数分两套视角（关键坑）**：`TYPE=total,data` 是 ARP/租约视角（返回 status/start_time/timeout 等，无网关）；
+    `TYPE=static_total,static_data` 是配置视角（前端同款），字段：id、enabled(yes/no)、interface、mac、ip_addr、gateway、dns1、dns2、comment。
+    **网关字段名 = `gateway`**（3.7.19 免费版实测），edit 缺 `enabled` 会报「参数错误: enabled」。
+  - edit/add 成功码为 `Result=30000`（非 10000），ErrMsg=="Success"。
 - 会话：登录后 `sess_key` cookie；会话过期码 10001，自动重登重试一次。
 """
 from __future__ import annotations
@@ -184,8 +185,15 @@ class IkuaiClient:
     # ---- DHCP 静态分配 ----
 
     def get_dhcp_bindings(self) -> list[dict]:
-        """读取 DHCP 静态分配列表（原始字段）。"""
-        data = self.call("dhcp_static", "show", {"TYPE": "total,data", "limit": "0,500"})
+        """读取 DHCP 静态分配列表（原始字段，含 gateway/enabled/dns）。
+
+        注意：必须用 `TYPE=static_total,static_data`（前端同款参数），
+        才能拿到配置视角字段（gateway/enabled/dns1/dns2）；
+        `TYPE=total,data` 是 ARP/租约视角，不含网关字段。
+        """
+        data = self.call(
+            "dhcp_static", "show", {"TYPE": "static_total,static_data", "limit": "0,500"}
+        )
         return self._extract_list(data)
 
     def save_dhcp_binding(self, item: dict, is_edit: bool) -> None:
@@ -205,19 +213,23 @@ class IkuaiClient:
         if target is None:
             raise IkuaiError(404, f"未找到该终端的静态绑定记录（MAC: {mac}）")
 
-        current = get_field(target, "gw", "gateway")
+        current = get_field(target, "gateway", "gw")
         new_gateway = decide_target_gateway(current, gateway_a, gateway_b)
 
-        updated = dict(target)
-        self._set_gateway_field(updated, new_gateway)
+        # edit 用配置视角的干净字段集（前端同款）；enabled 缺失会导致「参数错误」
+        updated = {
+            "id": target.get("id"),
+            "enabled": target.get("enabled") or "yes",
+            "interface": target.get("interface", ""),
+            "mac": get_field(target, "mac"),
+            "ip_addr": get_field(target, "ip_addr"),
+            "gateway": new_gateway,
+            "dns1": target.get("dns1", ""),
+            "dns2": target.get("dns2", ""),
+            "comment": target.get("comment", ""),
+        }
         self.save_dhcp_binding(updated, is_edit=True)
         return current, new_gateway
-
-    @staticmethod
-    def _set_gateway_field(item: dict, gateway: str) -> None:
-        """设置网关字段。爱快 dhcp_static 网关字段名待确认（gw vs gateway），默认 `gw`。"""
-        item.pop("gateway", None)
-        item["gw"] = gateway
 
     # ---- 解析工具 ----
 
@@ -304,14 +316,20 @@ class IkuaiClient:
             lst = data
         elif isinstance(data, dict):
             container = None
-            for key in ("Data", "data", "result", "results", "list", "items", "rows"):
+            for key in (
+                "Data", "data", "result", "results", "static_data",
+                "list", "items", "rows",
+            ):
                 if key in data:
                     container = data[key]
                     break
             if isinstance(container, list):
                 lst = container
             elif isinstance(container, dict):
-                for key in ("data", "result", "results", "list", "items", "rows"):
+                for key in (
+                    "data", "result", "results", "static_data",
+                    "list", "items", "rows",
+                ):
                     if isinstance(container.get(key), list):
                         lst = container[key]
                         break

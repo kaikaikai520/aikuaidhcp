@@ -102,7 +102,7 @@ def list_devices() -> dict:
         mac = get_field(item, "mac")
         name = get_field(item, "name", "hostname", "comment", "remark")
         ip = get_field(item, "ip", "ip_addr")
-        gateway = get_field(item, "gw", "gateway")
+        gateway = get_field(item, "gateway", "gw")
         devices.append(
             DeviceOut(
                 mac=mac,

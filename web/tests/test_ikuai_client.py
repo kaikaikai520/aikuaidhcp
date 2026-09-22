@@ -158,7 +158,23 @@ def test_get_dhcp_bindings_params():
         body = post.call_args.kwargs["json"]
         assert body["func_name"] == "dhcp_static"
         assert body["action"] == "show"
-        assert body["param"] == {"TYPE": "total,data", "limit": "0,500"}
+        assert body["param"] == {"TYPE": "static_total,static_data", "limit": "0,500"}
+
+
+def test_extract_list_static_data():
+    """配置视角字段集（static_total,static_data）应能提取列表。"""
+    resp = {
+        "ErrMsg": "Success",
+        "Data": {
+            "static_total": 1,
+            "static_data": [
+                {"mac": "aa:bb", "gateway": "1.1.1.1", "enabled": "yes"}
+            ],
+        },
+    }
+    assert IkuaiClient._extract_list(resp) == [
+        {"mac": "aa:bb", "gateway": "1.1.1.1", "enabled": "yes"}
+    ]
 
 
 def test_save_dhcp_binding_edit():
@@ -177,14 +193,22 @@ def test_toggle_gateway():
     show_resp = FakeResponse(
         {
             "ErrMsg": "Success",
-            "Data": [
-                {
-                    "mac": "AA:BB:CC:DD:EE:FF",
-                    "ip_addr": "10.0.0.2",
-                    "gw": "1.1.1.1",
-                    "comment": "NAS",
-                }
-            ],
+            "Data": {
+                "static_total": 1,
+                "static_data": [
+                    {
+                        "id": 40,
+                        "enabled": "yes",
+                        "interface": "auto",
+                        "mac": "AA:BB:CC:DD:EE:FF",
+                        "ip_addr": "10.0.0.2",
+                        "gateway": "1.1.1.1",
+                        "dns1": "",
+                        "dns2": "",
+                        "comment": "NAS",
+                    }
+                ],
+            },
         }
     )
     edit_resp = FakeResponse({"ErrMsg": "Success"})
@@ -196,7 +220,41 @@ def test_toggle_gateway():
         assert new == "2.2.2.2"
         edit_body = post.call_args_list[1].kwargs["json"]
         assert edit_body["action"] == "edit"
-        assert edit_body["param"]["gw"] == "2.2.2.2"
+        assert edit_body["param"]["gateway"] == "2.2.2.2"
+        assert edit_body["param"]["enabled"] == "yes"
+        assert edit_body["param"]["id"] == 40
+        assert edit_body["param"]["mac"] == "AA:BB:CC:DD:EE:FF"
+
+
+def test_toggle_gateway_missing_enabled_defaults_yes():
+    """show 记录缺 enabled 时，edit 应默认补 yes（否则爱快报参数错误）。"""
+    client = make_client()
+    client._logged_in = True
+    show_resp = FakeResponse(
+        {
+            "ErrMsg": "Success",
+            "Data": {
+                "static_data": [
+                    {
+                        "id": 1,
+                        "mac": "aa:bb:cc:dd:ee:ff",
+                        "ip_addr": "10.0.0.2",
+                        "gateway": "",
+                    }
+                ]
+            },
+        }
+    )
+    edit_resp = FakeResponse({"ErrMsg": "Success"})
+    with mock.patch.object(
+        client.session, "post", side_effect=[show_resp, edit_resp]
+    ) as post:
+        old, new = client.toggle_gateway("aa:bb:cc:dd:ee:ff", "1.1.1.1", "2.2.2.2")
+        assert old == ""  # 「自动」
+        assert new == "2.2.2.2"
+        edit_body = post.call_args_list[1].kwargs["json"]
+        assert edit_body["param"]["enabled"] == "yes"
+        assert edit_body["param"]["gateway"] == "2.2.2.2"
 
 
 def test_toggle_gateway_not_found():
