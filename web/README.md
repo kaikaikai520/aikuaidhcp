@@ -15,18 +15,27 @@ DHCP 静态分配的终端列表，并对每台终端在**预设的两个网关�
 
 ## 快速开始
 
-### 方式一：Docker（推荐，适合 NAS/软路由/Linux 常开设备）
+### 方式一：拉取预构建镜像（推荐，飞牛 NAS / 群晖 / 任意装 Docker 的设备）
+
+镜像由 GitHub Actions 自动构建推送到 Docker Hub（`dehua/aikuaidhcp`），无需本地构建：
+
+```bash
+cd web
+docker compose -f docker-compose.pull.yml up -d
+```
+
+浏览器访问 `http://<内网IP>:8000`。
+
+配置文件会落盘到 `web/data/`。
+
+### 方式二：本地构建部署
 
 ```bash
 cd web
 docker compose up -d --build
 ```
 
-浏览器访问 `http://<内网IP>:8000`。
-
-配置文件会落盘到 `web/data/config.json`。
-
-### 方式二：本地直接运行
+### 方式三：本地直接运行
 
 需要 Python 3.9+：
 

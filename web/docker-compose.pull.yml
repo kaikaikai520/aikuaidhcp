@@ -1,0 +1,13 @@
+# 免构建部署：直接拉取 Docker Hub 上的预构建镜像
+# 用法（飞牛 NAS / 任意装 Docker 的设备）：
+#   docker compose -f docker-compose.pull.yml up -d
+# 或把本文件内容粘贴到飞牛 Docker 应用的 Compose 里直接部署。
+services:
+  aikuaidhcp:
+    image: dehua/aikuaidhcp:latest
+    container_name: aikuaidhcp
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
