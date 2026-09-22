@@ -49,3 +49,12 @@ app.*.map.json
 
 # WorkBuddy 工作区数据（项目本地记忆，不入库）
 .workbuddy/
+
+# Python（Web 服务）
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# Web 服务运行时数据（config.json 含密码，不入库）
+web/data/

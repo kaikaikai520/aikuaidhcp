@@ -1,64 +1,76 @@
-# 技术方案：爱快 DHCP 网关切换助手（aikuaidhcp）
+# 技术方案：爱快 DHCP 网关切换助手（aikuaidhcp，Web 服务版）
 
-> 版本：v0.1
+> 版本：v0.2
 > 对应产品设计文档：`docs/PRD.md`
-> 更新日期：2026-09-11
+> 更新日期：2026-09-22
 
 ## 1. 技术选型
 
 | 类别 | 选型 | 理由 |
 |------|------|------|
-| 框架 | Flutter（Dart 3） | 跨平台、标准移动 UI 开发效率高、APK 打包顺滑，本机环境已就绪 |
-| 网络请求 | dio | 拦截器机制便于实现「会话过期自动重登」；可配置忽略自签名证书 |
-| 状态管理 | provider | MVP 规模足够，简单直观，不引入重型方案 |
-| 本地存储 | shared_preferences | 存连接信息 + 网关预设，读写简单 |
-| 密码安全 | flutter_secure_storage（可选） | 自用可先用 shared_preferences，后续按需升级 |
+| 后端框架 | FastAPI（Python 3.9+） | 轻量、异步友好、自动生成 OpenAPI 文档，适合自用内网工具 |
+| HTTP 客户端 | requests | 会话（Session）自动管理 cookie，配合忽略自签名证书，逻辑简单 |
+| 数据校验 | pydantic v2 | FastAPI 内置，请求/响应模型校验 |
+| 前端 | 原生 HTML + CSS + JS | 无构建步骤、无 CDN 依赖（内网可能无外网），移动端响应式 |
+| 部署 | Docker + docker-compose | 一键部署到 NAS/软路由/Linux 常开设备，配置数据卷持久化 |
+| 测试 | pytest + unittest.mock | 纯函数与请求组装逻辑的单元测试 |
 
 ## 2. 总体架构
 
-采用「UI 层 → 状态层 → 服务层 → 网络层」四层结构，职责单向依赖：
+从「客户端直连」改为「浏览器 → 后端 → 爱快」的三段式：
+
+```
+浏览器 ──HTTP──> Web 后端(FastAPI, 内网机器) ──HTTP──> 爱快路由器
+   │                    │
+   └── 静态页面/交互      ├── 登录认证、会话管理
+                        ├── DHCP 静态分配读写
+                        ├── 网关 A/B 切换编排
+                        └── 配置持久化(config.json)
+```
+
+后端内部仍保持职责分层：
 
 ```
 ┌─────────────────────────────────────────────┐
-│  UI 层（screens / widgets）                  │  页面与组件，只负责展示与交互
+│  路由层（main.py）                           │  REST API + 静态托管
 ├─────────────────────────────────────────────┤
-│  状态层（providers）                          │  ChangeNotifier，管理连接/列表/切换状态
+│  客户端层（ikuai_client.py）                 │  爱快 HTTP API、会话管理、认证、切换编排
 ├─────────────────────────────────────────────┤
-│  服务层（services）                           │  业务逻辑：登录、DHCP 读写、网关切换编排
-├─────────────────────────────────────────────┤
-│  网络层（IkuaiClient + dio）                  │  爱快 HTTP API、会话管理、认证
+│  配置层（config.py）                         │  config.json 读写（连接信息 + 网关预设）
 └─────────────────────────────────────────────┘
 ```
 
 **分层原则**：
 
-- UI 层不直接发请求，只调用状态层暴露的方法。
-- 服务层封装业务规则（如「切换网关 = 读取当前网关 → 取另一侧 → 提交」）。
-- 网络层只负责「与爱快通信」，不掺杂业务判断。
-- 各层通过依赖注入解耦，便于单元测试。
+- 路由层只做参数校验、调用客户端、组装响应，不掺业务细节。
+- 客户端层只负责「与爱快通信」，包含会话管理与网关切换编排。
+- 配置层只负责配置文件的线程安全读写。
+- 纯函数（认证编码、A/B 决策、字段兼容）独立导出，便于单元测试。
 
 ## 3. 项目结构
 
 ```
-lib/
-├── main.dart                 # 入口，初始化 Provider
-├── models/
-│   ├── router_config.dart    # 路由器连接配置
-│   ├── device.dart           # 终端设备
-│   └── gateway_config.dart   # 网关 A/B 预设
-├── services/
-│   ├── ikuai_client.dart     # 爱快 API 客户端（网络层）
-│   ├── dhcp_service.dart     # DHCP 配置读写（服务层）
-│   └── config_service.dart   # 本地配置存取（服务层）
-├── providers/
-│   ├── router_provider.dart  # 连接状态
-│   └── device_provider.dart  # 终端列表 + 切换状态
-├── screens/
-│   ├── connect_screen.dart   # 连接页
-│   ├── device_list_screen.dart # 终端列表页
-│   └── settings_screen.dart  # 设置页
-└── widgets/
-    └── device_tile.dart      # 终端行（含 A/B 开关）
+web/
+├── app/
+│   ├── __init__.py
+│   ├── main.py            # FastAPI 入口（路由 + 静态托管）
+│   ├── ikuai_client.py    # 爱快 API 客户端（登录/会话/切换/字段兼容）
+│   ├── config.py          # config.json 读写
+│   └── schemas.py         # Pydantic 模型
+├── static/
+│   ├── index.html         # 单页前端（配置页 + 列表页 + 设置）
+│   ├── app.js
+│   └── style.css
+├── tests/
+│   └── test_ikuai_client.py
+├── conftest.py            # 确保 `import app` 可用
+├── requirements.txt
+├── requirements-dev.txt
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
+├── config.example.json
+└── README.md
 ```
 
 ## 4. 核心模块设计
@@ -67,144 +79,165 @@ lib/
 
 这是整个产品的技术核心，负责与爱快路由器通信。
 
-**职责**：登录认证、会话管理、通用调用、会话过期自动重登。
+**职责**：登录认证、会话管理、通用调用、会话过期自动重登、网关切换编排。
 
 **关键方法**：
 
 | 方法 | 说明 |
 |------|------|
-| `login()` | 获取 salt → 计算凭据 → 登录 → 保存 sess_key |
-| `call(funcName, action, param)` | 带会话 cookie 调用 `/Action/call` |
-| `getDhcpBindings()` | 读取 DHCP 静态分配列表 |
-| `updateGateway(mac, gateway)` | 更新指定终端的网关 |
+| `login()` | 逐个尝试 salt → 计算凭据 → 登录 → 保存 sess_key |
+| `ensure_login()` | 仅在未登录时登录；会话过期由 `call()` 自动重登 |
+| `call(func_name, action, param)` | 带会话 cookie 调用 `/Action/call` |
+| `get_dhcp_bindings()` | 读取 DHCP 静态分配列表 |
+| `toggle_gateway(mac, a, b)` | 切换指定终端的网关，返回 (原网关, 新网关) |
 
-**认证流程**（爱快本地 API 的登录机制）：
+**认证流程**（爱快本地 API 的登录机制，联调实测）：
 
-1. 访问登录接口获取 `salt`（爱快可能存在多个 salt，需逐个尝试直到登录成功）。
-2. `passwd = MD5(明文密码)`。
-3. `pass = Base64(密码 + salt)` 组合编码。
-4. `POST /Action/login`，提交 `user_name`、`passwd`、`pass`、`vldcode` 等参数。
-5. 成功后从响应 / cookie 中取得 `sess_key`，作为后续请求的会话凭证。
+1. `passwd = MD5(明文密码)`。
+2. `pass = Base64(salt 前缀 + 明文密码)`。
+3. `POST /Action/login`，body `{username, passwd, pass, remember_password: null}`。
+4. salt 前缀随固件版本变化（`salt_123` / `salt_113` / `salt_11` / `salt_13`），逐个尝试直到成功。
+5. 成功后从 Set-Cookie 或响应体 `sess_key` 取会话凭证。
 
-> ⚠️ 说明：爱快不同固件版本的登录 salt 算法与字段命名存在差异，具体以联调实测为准。开发阶段先抓一次真实登录报文，再据此固化为客户端实现。
+**成功判断（关键坑，务必注意）**：
 
-**会话管理（dio 拦截器）**：
+爱快 `/Action/call` 的成功标识**不是 `Result` 码**，而是综合判断：
 
-- 请求拦截器：自动附加 `sess_key` cookie 与 `Content-Type`。
-- 响应拦截器：识别「会话过期」错误码，自动调用 `login()` 重登并**重试一次**，失败则抛出统一异常。
-- HTTPS 自签名证书：配置 `badCertificateCallback` 忽略证书校验（爱快默认自签名）。
+- `Result == 10000`（旧版）或 `code == 0`（企业版 4.x）；
+- 或 `ErrMsg == "Success"`（部分固件响应**不含 `Result` 字段**，只有 `ErrMsg` + `Data`）。
 
-### 4.2 DHCP 配置读写（DhcpService）
+若只判断 `Result == 10000` 会误判失败（报错信息恰好是 "Success"）。
 
-- **读取**：调用 `dhcp_server` 模块的查询动作，解析返回的终端列表（MAC、IP、网关、备注等），映射为 `Device` 模型。
-- **更新网关**：定位到目标 MAC 对应的静态绑定记录，替换 `gateway` 字段后提交保存动作。
+**会话管理**：
 
-> ⚠️ 说明：爱快「DHCP 静态分配」的读写 `func_name` / `action` / 字段名（如 `gateway` vs `gw`）随固件版本有差异，需在开发阶段联调确认，并在客户端内做字段兼容。
+- `requests.Session` 自动保存 Set-Cookie；若响应体含 `sess_key` 则补存。
+- 识别「会话过期」（返回码 `10001`，或提示语含 `no login`/`未登录`/`expired`/`过期`，或响应非 JSON）→ 自动重登并**重试一次**。
+- HTTPS 自签名证书：`session.verify = False` 忽略校验。
+
+### 4.2 DHCP 静态分配读写
+
+- **读取**：`func_name = "dhcp_static"`，`action = "show"`，`param = {"TYPE": "total,data", "limit": "0,500"}`。
+  - 列表数据容器兼容：`Data` / `data` / `result` / `results`，内层字段 `data`/`result`/`list`/`items`/`rows`。
+- **更新网关**：定位到目标 MAC 对应的静态绑定记录，替换网关字段后提交 `edit`（param 为**平铺字段**，不要 `{"data":{}}` 包装）。
+  - 字段：`mac`、`ip_addr`、`comment`、`dns1`/`dns2`（3.7.12+）；网关字段名见下方「待确认点」。
+
+> ⚠️ **网关字段名待确认**：爱快不同模块网关字段命名不一（`static_rt` 用 `gateway`，DHCP 相关常缩写 `gw`）。
+> 逆向项目 gxxHuang 的 `dhcp_static` `add` 仅含 `mac/ip_addr/comment`、`delete` 用 `{"id":xxx}`（action=`del`），
+> **未覆盖网关字段**，无法从源码定名。本实现默认用 `gw` 并做 `gw`/`gateway` 双字段兼容，
+> 最终以设备真实抓包为准（见 `_set_gateway_field` 一处修改点）。
 
 ### 4.3 网关 A/B 切换（核心业务）
 
-切换逻辑编排在 `DeviceProvider` / `DhcpService` 中：
-
 ```
 用户点击开关
-  → 读取该终端当前网关
-  → 判断当前是 A 还是 B（无法匹配时按「当前≈A」处理）
-  → 取另一侧作为目标网关
-  → 调用 updateGateway(mac, 目标网关)
-  → 成功：刷新列表、更新开关状态
-  → 失败：回滚开关、提示错误
+  → 后端读取该终端当前网关（字段兼容 gw/gateway）
+  → decide_target_gateway(current, A, B)：current==B → A；否则 → B（无法匹配按「当前≈A」处理）
+  → 更新网关字段后提交 edit
+  → 成功：返回新网关；失败：抛出 IkuaiError（前端提示，开关回滚）
 ```
 
 **关键约束**：
 
-- 切换期间该终端行进入 loading 态，防止重复提交。
-- 提交失败不改变 UI 状态（乐观更新前先锁定，失败回滚）。
-- 网关 A/B 相等时，开关禁用并提示。
+- 切换期间前端该终端开关进入 loading 态，防止重复提交。
+- 提交失败不改变 UI 状态（无乐观更新，天然回滚）。
+- 网关 A/B 相等或未配置时，路由层直接拒绝并提示。
 
-### 4.4 本地配置存储（ConfigService）
+### 4.4 配置存储（ConfigStore）
 
-- 存储内容：路由器地址（host/port/是否 HTTPS）、用户名、密码、网关 A、网关 B。
-- 读写通过 `shared_preferences`，键名集中定义常量。
-- 提供「清除凭据」方法，供设置页调用。
+- 存储内容：`host`、`port`、`use_https`、`username`、`password`、`gateway_a`、`gateway_b`。
+- 读写 `data/config.json`，线程安全（加锁），写入用临时文件 + `replace` 保证原子性。
+- 数据目录优先环境变量 `DATA_DIR`（Docker 中挂载为 `/data`），否则默认 `web/data`。
 
 ## 5. 数据模型
 
-```dart
-class RouterConfig {
-  final String host;      // 例：192.168.17.254
-  final int port;         // 默认 80（HTTP）/ 443（HTTPS）
-  final String username;
-  final String password;
-  final bool useHttps;
-}
+```python
+class ConfigIn(BaseModel):          # 连接配置
+    host: str                       # 例：192.168.1.1
+    port: int = 80
+    use_https: bool = False
+    username: str = ""
+    password: str = ""
+    gateway_a: str = ""             # 网关 A
+    gateway_b: str = ""             # 网关 B
 
-class Device {
-  final String mac;       // 唯一标识，用于定位终端
-  final String name;      // 设备名 / 备注
-  final String ip;
-  final String gateway;   // 当前网关
-}
+class DeviceOut(BaseModel):         # 终端设备
+    mac: str                        # 唯一标识
+    name: str                       # 设备名 / 备注
+    ip: str
+    gateway: str                    # 当前网关
+    is_a: bool                      # 是否等于网关 A
+    is_b: bool                      # 是否等于网关 B
 
-class GatewayConfig {
-  final String gatewayA;
-  final String gatewayB;
-}
+class ToggleResult(BaseModel):      # 切换结果
+    mac: str
+    old_gateway: str
+    new_gateway: str
 ```
 
-## 6. 关键流程
+## 6. REST API 设计
 
-### 6.1 登录流程
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/health` | 健康检查 |
+| GET | `/api/config` | 读取配置 |
+| POST | `/api/config` | 保存配置 |
+| POST | `/api/login` | 测试/建立连接 |
+| GET | `/api/devices` | 拉取终端列表 |
+| POST | `/api/devices/{mac}/toggle` | 切换指定终端网关 |
+
+错误统一返回 `{"detail": "<可读信息>"}`，HTTP 状态码 400（业务错误）。
+
+## 7. 关键流程
+
+### 7.1 首次访问
 
 ```
-打开应用 → 读取本地 RouterConfig
-  → 有配置：直接调用 login() 建立会话
-  → 无配置/登录失败：进入连接页，用户填写后保存并登录
-  → 成功进入终端列表
+打开页面 → GET /api/config → 无 host → 显示配置页 → 用户填写 → POST /api/config
+  → POST /api/login 测试连接 → 成功进入列表页
 ```
 
-### 6.2 拉取终端列表
+### 7.2 拉取终端列表
 
 ```
-login() 成功 → getDhcpBindings() → 解析为 List<Device>
-  → DeviceProvider 更新列表 → UI 渲染每台的 A/B 开关
+GET /api/devices → 后端 ensure_login → get_dhcp_bindings()
+  → 解析为 DeviceOut 列表（含 is_a/is_b） → 前端渲染 A/B 开关
 ```
 
-### 6.3 切换网关
+### 7.3 切换网关
 
 见 4.3 节的编排流程。
 
-## 7. 错误处理
+## 8. 错误处理
 
 | 场景 | 处理方式 |
 |------|---------|
-| 网络不可达 / 超时 | 提示「无法连接路由器，请检查网络与地址」 |
-| 登录失败（凭据错误） | 提示「用户名或密码错误」，回到连接页 |
-| 会话过期 | 拦截器自动重登并重试一次 |
-| 切换提交失败 | 回滚开关，提示具体错误 |
+| 网络不可达 / 超时 | 提示「无法连接路由器」 |
+| 登录失败（凭据错误） | 提示「用户名或密码错误」，回到配置页 |
+| 会话过期 | 客户端自动重登并重试一次 |
+| 切换提交失败 | 前端开关回滚，提示具体错误 |
 | 爱快字段 / 版本不兼容 | 客户端做字段兼容，必要时提示「固件版本不支持」 |
 
-统一封装 `IkuaiException`，携带错误码与可读信息，UI 层只消费友好文案，不暴露堆栈。
+统一封装 `IkuaiError`，携带错误码与可读信息，路由层转为 HTTP 400 + `detail`，前端只展示友好文案。
 
-## 8. 测试策略
+## 9. 测试策略
 
-- **单元测试**：认证编码（MD5 / Base64 / salt 组合）、DHCP 参数组装、网关 A/B 判断逻辑。
-- **Widget 测试**：连接页表单校验、终端列表渲染、开关切换状态变化。
-- **集成 / 冒烟测试**：连接真实爱快设备，手动验证「登录 → 拉列表 → 切换 → 生效」，重点核对真实接口字段。
+- **单元测试**（pytest）：认证编码（MD5/Base64/salt）、A/B 决策、成功判断兼容（Result/code/ErrMsg）、字段兼容、列表提取、请求参数组装、切换编排（mock `session.post` 捕获请求体断言）。
+- **冒烟测试**：本地启动服务，`GET /api/health`、`GET /api/config` 等接口连通性验证；连接真实爱快设备手动验证「登录 → 拉列表 → 切换 → 生效」。
 
-遵循项目 `AGENTS.md` 规范：每次改动后编写 / 更新对应测试，交付前确保测试与验证全部通过。
+遵循项目 `AGENTS.md` 规范：每次改动后编写/更新对应测试，交付前确保测试与验证全部通过。
 
-## 9. 打包与发布
+## 10. 部署
 
-- 构建命令：`flutter build apk --release`
-- 签名：自用可先用 debug 签名；正式分发前生成自有 keystore 并配置 `signingConfig`。
-- 产物：`build/app/outputs/flutter-apk/app-release.apk`，可直接拷贝到手机安装。
-- 最低 Android 版本：按 Flutter 默认（API 21+），满足绝大多数设备。
+- **Docker**（推荐）：`cd web && docker compose up -d --build`，浏览器访问 `http://<内网IP>:8000`。
+- **本地运行**：`pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000`。
+- 配置持久化：Docker 挂载 `./data:/data`；本地落盘 `web/data/config.json`。
 
-## 10. 实现顺序建议
+## 11. 实现顺序建议
 
-1. 网络层 `IkuaiClient`（认证 + 会话，先联调真实登录报文）。
-2. 服务层 `ConfigService` + `DhcpService`。
-3. 状态层 `RouterProvider` / `DeviceProvider`。
-4. UI 层四个页面与终端行组件。
-5. 单元 + Widget 测试。
-6. 打包 APK 并冒烟验证。
+1. 爱快客户端 `ikuai_client.py`（认证 + 会话 + 切换，先联调真实登录报文）。
+2. 配置层 `config.py` + 数据模型 `schemas.py`。
+3. 路由层 `main.py`。
+4. 前端单页 `static/`。
+5. 单元测试 `tests/`。
+6. 部署文件 + README。
+7. 冒烟验证并 git 提交。

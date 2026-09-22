@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>爱快 DHCP 网关切换助手</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">⇆</span>
+      <span class="title">爱快 DHCP 网关切换</span>
+    </div>
+    <div class="actions">
+      <span id="status-badge" class="badge badge-idle">未连接</span>
+      <button id="btn-settings" class="icon-btn" title="设置">⚙</button>
+    </div>
+  </header>
+
+  <!-- 终端列表视图 -->
+  <main id="list-view" class="view">
+    <div class="toolbar">
+      <span id="summary" class="summary">加载中…</span>
+      <button id="btn-refresh" class="btn">刷新</button>
+    </div>
+    <div id="list-error" class="banner banner-error hidden"></div>
+    <ul id="device-list" class="device-list"></ul>
+    <div id="list-empty" class="empty hidden">暂无终端。请先在爱快「网络设置 → DHCP设置 → DHCP静态分配」中添加静态绑定记录。</div>
+  </main>
+
+  <!-- 配置视图 -->
+  <main id="config-view" class="view hidden">
+    <form id="config-form" class="config-form" autocomplete="off">
+      <h2>路由器连接</h2>
+      <div class="field-row">
+        <label class="field grow">
+          <span>地址</span>
+          <input name="host" placeholder="192.168.1.1" required>
+        </label>
+        <label class="field small">
+          <span>端口</span>
+          <input name="port" type="number" value="80" min="1" max="65535">
+        </label>
+      </div>
+      <label class="field checkbox">
+        <input name="use_https" type="checkbox"> 使用 HTTPS（忽略自签名证书）
+      </label>
+      <div class="field-row">
+        <label class="field grow">
+          <span>用户名</span>
+          <input name="username" autocomplete="off">
+        </label>
+        <label class="field grow">
+          <span>密码</span>
+          <input name="password" type="password" autocomplete="new-password">
+        </label>
+      </div>
+
+      <h2>网关 A/B 预设</h2>
+      <div class="field-row">
+        <label class="field grow">
+          <span>网关 A</span>
+          <input name="gateway_a" placeholder="192.168.1.1">
+        </label>
+        <label class="field grow">
+          <span>网关 B</span>
+          <input name="gateway_b" placeholder="192.168.1.2">
+        </label>
+      </div>
+
+      <div id="form-msg" class="banner banner-error hidden"></div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">保存并连接</button>
+        <button type="button" id="btn-cancel" class="btn btn-ghost">取消</button>
+      </div>
+      <p class="hint">网关 A/B 为两个预设地址，点击终端开关即可在其间切换。</p>
+    </form>
+  </main>
+
+  <!-- 切换中遮罩提示 -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

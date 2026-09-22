@@ -1,0 +1,9 @@
+services:
+  aikuaidhcp:
+    build: .
+    container_name: aikuaidhcp
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
