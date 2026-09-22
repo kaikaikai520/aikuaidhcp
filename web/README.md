@@ -15,7 +15,7 @@ DHCP 静态分配的终端列表，并对每台终端在**预设的两个网关�
 
 ## 快速开始
 
-### 方式一：拉取预构建镜像（推荐，飞牛 NAS / 群晖 / 任意装 Docker 的设备）
+### 方式一：拉取预构建镜像（推荐，NAS / 群晖 / 任意装 Docker 的设备）
 
 镜像由 GitHub Actions 自动构建推送到 Docker Hub（`dehua/aikuaidhcp`），无需本地构建：
 

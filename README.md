@@ -26,7 +26,7 @@ DHCP 静态分配的终端列表，并对每台终端在**预设的两个网关�
 
 ## 部署方式
 
-### 方式一：拉取预构建镜像（推荐，飞牛 NAS / 群晖 / 任意装 Docker 的设备）
+### 方式一：拉取预构建镜像（推荐，NAS / 群晖 / 任意装 Docker 的设备）
 
 镜像由 GitHub Actions 自动构建并推送到 Docker Hub（`dehua/aikuaidhcp`），设备上**无需构建**，直接拉取运行：
 
@@ -35,7 +35,7 @@ cd web
 docker compose -f docker-compose.pull.yml up -d
 ```
 
-或在飞牛「Docker 应用 → Compose」里直接粘贴 `docker-compose.pull.yml` 内容部署。
+或在「Docker 应用 → Compose」里直接粘贴 `docker-compose.pull.yml` 内容部署。
 
 浏览器访问 `http://<设备内网IP>:8000` 即可。
 
