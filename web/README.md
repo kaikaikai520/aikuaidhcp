@@ -100,9 +100,9 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-## 已知待确认点
+## 关键实现说明
 
-- **爱快 DHCP 静态分配的网关字段名**：不同模块命名不一（`static_rt` 用 `gateway`，
-  DHCP 相关常缩写 `gw`）。本实现默认用 `gw` 并做 `gw`/`gateway` 双字段兼容；
-  若切换报错，抓取爱快 Web 后台「DHCP 静态分配」编辑请求的 `param` 确认字段名后，
-  修改 `app/ikuai_client.py` 中的 `_set_gateway_field` 即可。
+- **爱快 DHCP 静态分配的网关字段名 = `gateway`**（免费版 3.7.19 实测确认）。
+- **show 参数分两套视角**：`TYPE=static_total,static_data` 才是配置视角
+  （含 `gateway`/`enabled`/`dns1`/`dns2`），`TYPE=total,data` 是 ARP/租约视角（无网关字段）。
+- edit 需带 `enabled="yes"`，否则爱快报「参数错误: enabled」；成功码为 `Result=30000`。
