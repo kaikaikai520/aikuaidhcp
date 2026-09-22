@@ -11,6 +11,7 @@ DHCP 静态分配的终端列表，并对每台终端在**预设的两个网关�
 - **终端列表**：拉取 DHCP 静态分配列表，展示设备名、IP、MAC、当前网关。
 - **网关 A/B 一键切换**：预设两个网关，点开关即在 A/B 之间切换并即时提交到爱快。
 - **配置持久化**：连接信息与网关预设保存到 `config.json`，重启自动加载。
+- **终端隐藏**：可把不常切换的设备「隐藏」，列表默认只显示未隐藏终端；隐藏列表独立存 `data/hidden.json`。
 
 ## 快速开始
 
@@ -42,6 +43,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 1. 首次打开会进入配置页，填写爱快连接信息 + 网关 A/B，点「保存并连接」。
 2. 连接成功后进入终端列表，每台终端右侧有一个开关：**关 = 网关 A，开 = 网关 B**。
 3. 点开关即可切换，成功后列表自动刷新。
+4. 终端太多时点「隐藏」收起；需要时点顶部「隐藏的终端 (N)」再「恢复」。
 
 ## 前置条件（爱快侧）
 
@@ -72,6 +74,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 | POST | `/api/login` | 测试/建立连接 |
 | GET | `/api/devices` | 拉取终端列表 |
 | POST | `/api/devices/{mac}/toggle` | 切换指定终端网关 |
+| POST | `/api/devices/{mac}/hide` | 隐藏指定终端 |
+| POST | `/api/devices/{mac}/unhide` | 恢复显示指定终端 |
 
 ## 目录结构
 
@@ -80,7 +84,7 @@ web/
 ├── app/
 │   ├── main.py            # FastAPI 入口（路由 + 静态托管）
 │   ├── ikuai_client.py    # 爱快 API 客户端（登录/会话/切换）
-│   ├── config.py          # config.json 读写
+│   ├── config.py          # config.json / hidden.json 读写
 │   └── schemas.py         # Pydantic 模型
 ├── static/
 │   ├── index.html         # 单页前端
