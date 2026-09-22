@@ -5,8 +5,7 @@ DHCP 静态分配的终端列表，并对每台终端在**预设的两个网关�
 
 ## 当前形态
 
-- **Web 服务**（`web/`，当前主推）：Python + FastAPI，Docker 部署，浏览器输入 `http://内网IP:8000` 即可使用。
-- **Android APK**（`lib/`、`android/`，已归档）：Flutter 实现的早期形态，现已由 Web 服务取代。
+- **Web 服务**（`web/`）：Python + FastAPI，Docker 部署，浏览器输入 `http://内网IP:8000` 即可使用。
 
 ## 快速开始
 
