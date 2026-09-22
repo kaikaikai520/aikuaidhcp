@@ -169,13 +169,14 @@
         method: 'POST',
       });
       showToast(`已切换：${r.old_gateway || '—'} → ${r.new_gateway}`);
+      // 先移出集合再重渲染，避免新按钮被误标为 loading 而永久转圈
+      toggling.delete(d.mac);
       await loadDevices();
     } catch (e) {
+      toggling.delete(d.mac);
       showToast('切换失败：' + e.message);
       sw.classList.remove('loading');
       sw.disabled = false;
-    } finally {
-      toggling.delete(d.mac);
     }
   }
 

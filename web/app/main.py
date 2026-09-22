@@ -24,6 +24,17 @@ store = ConfigStore()
 _client: Optional[IkuaiClient] = None
 
 
+@app.middleware("http")
+async def _no_cache_static(request, call_next):
+    """静态资源与首页禁用缓存，避免改版后浏览器继续用旧 JS/CSS。"""
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/static/") or path == "/":
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
+
 def _get_client() -> IkuaiClient:
     """按当前配置懒加载客户端；配置变更时重建。"""
     global _client
